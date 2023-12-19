@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Arkanoid</title>
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
+</head>
+<body>
+<script type="text/javascript">
+const config = {
+    type: Phaser.AUTO,
+    width:  800,
+    height: 600,
+    physics: {  // use physics only for this feature: setCollideWorldBounds
+        default: 'arcade',
+        arcade: {
+            gravity: { y: 0 },
+            debug: false
+        }
+    },
+    scene: {
+        preload: preload,
+        create: create,
+        update: update
+    }
+};
+const GAME_COLS = 12;
+const GAME_ROWS = 40;
+
+const BLOCK_WIDTH = Math.floor(config.width / GAME_COLS);
+const BLOCK_HEIGHT= Math.floor(config.height/ GAME_ROWS);
+const BLOCKS_NUMBER = 50;
+
+const PLATFORM_Y = config.height - 50;
+const PLATFORM_VELOCITY = 300;
+
+const BALL_HEIGHT = BLOCK_HEIGHT * 0.7;
+const BALL_VELOCITY = 250;
+
+const BALL_HEIGHT_2 = BALL_HEIGHT / 2;
+const BLOCK_HEIGHT_2= BLOCK_HEIGHT/ 2;
+const BLOCK_WIDTH_2 = BLOCK_WIDTH / 2;
+
+const STATE_START= 0;
+const STATE_PLAY = 1;
+const STATE_WIN  = 2;
+
+let state = STATE_START;
+let platform;
+let ball;
+let is_collision_blocked = false;
+
+let cursors;
+let score = 0;
+let score_text;
+let win_text;
+
+const blocks_map = new Map();
+let ball_block_hash = '';
+function getBlockHash(x, y) {
+    x = Math.floor(x / BLOCK_WIDTH);
+    y = Math.floor(y / BLOCK_HEIGHT);
+    const hash = x + '_' + y;
+    return hash;
+}
+const game = new Phaser.Game(config);
+
+function preload () {
+    this.load.image('block', 'assets/block.png');
+    this.load.image('platform', 'assets/platform.png');
+    this.load.image('ball', 'assets/ball.png');
+}
+function createBlocks(number, game) {
+    let x = 0;
+    let y = 0;    
+    for (let i = 0; i < number; i++) {
+        const block = game.add.sprite(x + BLOCK_WIDTH/2, y + BLOCK_HEIGHT/2, 'block');
+        block.displayWidth = BLOCK_WIDTH;
+        block.displayHeight= BLOCK_HEIGHT;
+
+        const hash = getBlockHash(x, y);
+        blocks_map.set(hash, block);
+        
+        x += BLOCK_WIDTH;
+        if (i % GAME_COLS === GAME_COLS-1) {
+            x = 0;
+            y += BLOCK_HEIGHT;
+        }
+    }
+}
+function createPlatform(game) {
+    platform = game.physics.add.sprite(config.width / 2, PLATFORM_Y, 'platform');
+    platform.setCollideWorldBounds(true);
+    platform.displayWidth = BLOCK_WIDTH;
+    platform.displayHeight= BLOCK_HEIGHT;    
+}
+function createBall(game) {
+    ball = game.physics.add.sprite(config.width / 2, PLATFORM_Y - BALL_HEIGHT, 'ball');
+    ball.setCircle(BALL_HEIGHT);
+    ball.setBounce(1.0);
+    ball.setCollideWorldBounds(true);
+}
+function create() {
+    createBlocks(BLOCKS_NUMBER, this);
+    createPlatform(this);
+    createBall(this);
+
+    cursors = this.input.keyboard.createCursorKeys();
+    
+    score_text = this.add.text(8, 570, 'score: 0', { fontSize: '18px', fill: '#fff' });
+    win_text   = this.add.text(config.width / 2, config.height / 2, 'WIN', { fontSize: '28px', fill: '#fff' });
+    win_text.visible = false;
+}
+function controlPlatform() {
+    if (cursors.left.isDown) {
+        platform.setVelocityX(-PLATFORM_VELOCITY);
+    }
+    else if (cursors.right.isDown) {
+        platform.setVelocityX(PLATFORM_VELOCITY);
+    }
+    else {
+        platform.setVelocityX(0);
+    }
+    platform.y = PLATFORM_Y;
+}
+function blockCollisionTest() {
+    is_collision_blocked = true;
+
+    setTimeout(() => {
+        is_collision_blocked = false;
+    }, 50);
+}
+function update () {
+    if (state === STATE_START) {
+        controlPlatform();
+        ball.x = platform.x;
+
+        if (cursors.space.isDown) {
+            state = STATE_PLAY;
+
+            ball_block_hash = getBlockHash(ball.x, ball.y);
+            ball.setVelocity(BALL_VELOCITY, -BALL_VELOCITY);
+            blockCollisionTest();
+        }
+    }
+    else if (state === STATE_PLAY) {
+        controlPlatform();
+
+        // check collision with blocks and platform
+        if (is_collision_blocked) {
+            return;
+        }
+        const new_ball_hash = getBlockHash(ball.x, ball.y);
+        if (new_ball_hash !== ball_block_hash) {
+            const block = blocks_map.get(new_ball_hash);
+            if (block) {
+                destroyBlock(new_ball_hash, block);
+
+                ball.body.velocity.y = -ball.body.velocity.y;
+                blockCollisionTest();
+
+                checkGameFinish();
+            }
+            ball_block_hash = new_ball_hash;
+        }
+        if (ball.y + BALL_HEIGHT_2 >= PLATFORM_Y - BLOCK_HEIGHT_2 && ball.y - BALL_HEIGHT_2 <= PLATFORM_Y + BLOCK_HEIGHT_2) {
+            if (ball.x + BALL_HEIGHT_2 >= platform.x - BLOCK_WIDTH_2 && ball.x - BALL_HEIGHT_2 <= platform.x + BLOCK_WIDTH_2) {
+                ball.body.velocity.y = -ball.body.velocity.y;
+
+                blockCollisionTest();
+            }
+        }
+    }
+}
+function destroyBlock(hash, block) {
+    block.destroy(true);
+    blocks_map.delete(hash);
+
+    score += 1;
+    score_text.setText('Score: ' + score);
+}
+function checkGameFinish() {
+    if (blocks_map.size === 0) {
+        state = STATE_WIN;
+        ball.destroy(true);
+        win_text.visible = true;
+    }
+}
+</script>
+</body>
+</html>
